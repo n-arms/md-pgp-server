@@ -1,2 +1,2 @@
 # md-pgp-server
-Collaborative E2EE real time markdown editor client
+Collaborative E2EE real time markdown editor server
