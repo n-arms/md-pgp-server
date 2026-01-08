@@ -1,9 +1,10 @@
 use axum::{
     Router,
     extract::{Path, State},
+    http::StatusCode,
     routing::get,
 };
-use sqlx::{SqlitePool, pool, sqlite::SqlitePoolOptions};
+use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 
 #[tokio::main]
 async fn main() {
@@ -24,18 +25,27 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn handle_get_key(State(pool): State<SqlitePool>, Path(key): Path<String>) -> String {
-    insert_user(pool, &key).await;
-
-    format!("Got key {key:?}")
+async fn handle_get_key(
+    State(pool): State<SqlitePool>,
+    Path(key): Path<String>,
+) -> Result<String, (StatusCode, String)> {
+    match insert_user(pool, &key).await {
+        Ok(()) => Ok(format!("Got key {key:?}")),
+        Err(e) => {
+            let error_message = e.to_string();
+            if error_message.contains("UNIQUE constraint failed") {
+                Err((StatusCode::CONFLICT, "user already exists".to_string()))
+            } else {
+                Err((StatusCode::INTERNAL_SERVER_ERROR, error_message))
+            }
+        }
+    }
 }
 
-async fn insert_user(pool: SqlitePool, fingerprint: &String) {
-    let result = sqlx::query(r#"insert into users (uid) values (?)"#)
+async fn insert_user(pool: SqlitePool, fingerprint: &String) -> Result<(), sqlx::Error> {
+    sqlx::query(r#"insert into users (uid) values (?)"#)
         .bind(&fingerprint)
         .execute(&pool)
-        .await;
-    if result.is_err() {
-        println!("Error inserting user: {:?}", result.err());
-    }
+        .await?;
+    Ok(())
 }
