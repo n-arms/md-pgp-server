@@ -84,11 +84,11 @@ async fn create_document(
     pool: &SqlitePool,
     owner_fingerprint: &String,
     doc_name: &String,
-) -> String {
-    let id = Uuid::now_v7().to_string();
+) -> Uuid {
+    let id = Uuid::now_v7();
 
     sqlx::query(r#"insert into documents (doc_id, name, user_id) values (?, ?, ?)"#)
-        .bind(&id)
+        .bind(&id.to_string())
         .bind(&doc_name)
         .bind(&owner_fingerprint)
         .execute(pool)
@@ -100,14 +100,14 @@ async fn create_document(
 
 async fn share_document(
     pool: &SqlitePool,
-    doc_id: &String,
+    doc_id: &Uuid,
     owner_fingerprint: &String,
     user_fingerprint: &String,
 ) {
     // get document from id
     // check owner
     let doc_row = sqlx::query(r#"select user_id from documents where doc_id = ?"#)
-        .bind(&doc_id)
+        .bind(&doc_id.to_string())
         .fetch_one(pool)
         .await
         .unwrap();
@@ -130,8 +130,8 @@ async fn share_document(
     // parse shared ids to vec
     let mut shared_ids = [].to_vec();
     let shared_row = sqlx::query(r#"select shared_with from documents where doc_id = ?"#)
-        .bind(&doc_id)
-        .fetch_one(pool)
+        .bind(&doc_id.to_string())
+        .fetch_one(pool) 
         .await
         .unwrap();
     let shared_with: String = shared_row.get("shared_with");
@@ -156,7 +156,7 @@ async fn share_document(
     // update document
     sqlx::query(r#"update documents set shared_with = ? where doc_id = ?"#)
         .bind(&shared_with_str)
-        .bind(&doc_id)
+        .bind(&doc_id.to_string())
         .execute(pool)
         .await
         .unwrap();
@@ -166,7 +166,7 @@ async fn share_document(
 async fn get_user_docs(
     pool: &SqlitePool,
     fingerprint: &String,
-) -> Result<Vec<String>, sqlx::Error> {
+) -> Result<Vec<Uuid>, sqlx::Error> {
     let mut doc_ids = [].to_vec();
     let rows = sqlx::query(r#"select doc_id from documents where user_id = ?"#)
         .bind(&fingerprint)
@@ -175,7 +175,7 @@ async fn get_user_docs(
 
     for row in rows {
         let doc_id: String = row.get("doc_id");
-        doc_ids.push(doc_id);
+        doc_ids.push(Uuid::parse_str(&doc_id).unwrap());
     }
 
     Ok(doc_ids)

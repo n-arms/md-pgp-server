@@ -8,3 +8,4 @@ axum = { version = "0.8.8", features = ["ws", "macros"] }
 sqlx = { version = "=0.8.1", features = ["sqlite", "runtime-tokio"] }
 rusqlite = "=0.32.1"
 tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread"] }
+uuid = { version = "1.19.0", features = ["v7"] }
