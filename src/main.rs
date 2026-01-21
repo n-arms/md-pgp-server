@@ -80,11 +80,7 @@ async fn insert_user(pool: &SqlitePool, fingerprint: &String) -> Result<(), sqlx
     Ok(())
 }
 
-async fn create_document(
-    pool: &SqlitePool,
-    owner_fingerprint: &String,
-    doc_name: &String,
-) -> Uuid {
+async fn create_document(pool: &SqlitePool, owner_fingerprint: &String, doc_name: &String) -> Uuid {
     let id = Uuid::now_v7();
 
     sqlx::query(r#"insert into documents (doc_id, name, user_id) values (?, ?, ?)"#)
@@ -131,7 +127,7 @@ async fn share_document(
     let mut shared_ids = [].to_vec();
     let shared_row = sqlx::query(r#"select shared_with from documents where doc_id = ?"#)
         .bind(&doc_id.to_string())
-        .fetch_one(pool) 
+        .fetch_one(pool)
         .await
         .unwrap();
     let shared_with: String = shared_row.get("shared_with");
@@ -160,13 +156,9 @@ async fn share_document(
         .execute(pool)
         .await
         .unwrap();
-
 }
 
-async fn get_user_docs(
-    pool: &SqlitePool,
-    fingerprint: &String,
-) -> Result<Vec<Uuid>, sqlx::Error> {
+async fn get_user_docs(pool: &SqlitePool, fingerprint: &String) -> Result<Vec<Uuid>, sqlx::Error> {
     let mut doc_ids = [].to_vec();
     let rows = sqlx::query(r#"select doc_id from documents where user_id = ?"#)
         .bind(&fingerprint)
