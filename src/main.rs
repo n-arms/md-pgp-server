@@ -1,12 +1,21 @@
 use axum::{
     Router,
-    extract::{Path, State},
+    body::{self},
+    extract::State,
     http::StatusCode,
-    routing::get,
+    routing::post,
+};
+use pgp::{
+    composed::{Deserializable, SignedPublicKey},
+    packet::Signature,
+    ser::Serialize,
+    types::{KeyDetails, KeyId},
 };
 use sqlx::{Row, SqlitePool, sqlite::SqlitePoolOptions};
-use std::fs::File;
+use std::{fs::File, io};
 use uuid::Uuid;
+
+use crate::signature::{message_keyid, parse_message, verify_message};
 
 mod signature;
 
@@ -15,7 +24,7 @@ async fn main() {
     let pool = connect_db().await;
     // build our application with a single route
     let app = Router::new()
-        .route("/key/{key}", get(handle_get_key))
+        .route("/create", post(handle_create_account))
         .with_state(pool.clone());
 
     // run our app with hyper, listening globally on port 3000
@@ -39,12 +48,14 @@ async fn connect_db() -> SqlitePool {
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS users (
-            uid TEXT PRIMARY KEY
+            uid TEXT PRIMARY KEY,
+            key_blob BLOB NOT NULL
         );
         CREATE TABLE IF NOT EXISTS documents (
             doc_id TEXT PRIMARY KEY,
             name TEXT,
             user_id TEXT,
+            shared_with TEXT,
             FOREIGN KEY (user_id) REFERENCES users(uid) 
         );
         "#,
@@ -56,10 +67,26 @@ async fn connect_db() -> SqlitePool {
     pool
 }
 
-async fn handle_get_key(
+fn parse_create_account(bytes: &[u8]) -> anyhow::Result<SignedPublicKey> {
+    let (signature, plaintext) = parse_message(bytes)?;
+    let key = SignedPublicKey::from_bytes(io::Cursor::new(plaintext.clone()))?;
+    verify_message(&signature, &key, &plaintext)?;
+    Ok(key)
+}
+
+async fn handle_create_account(
     State(pool): State<SqlitePool>,
-    Path(key): Path<String>,
+    body: body::Bytes,
 ) -> Result<String, (StatusCode, String)> {
+    let key = match parse_create_account(&body) {
+        Ok(key) => key,
+        Err(error) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("Error creating account:\n{error}"),
+            ));
+        }
+    };
     match insert_user(&pool, &key).await {
         Ok(()) => Ok(format!("ok")),
         Err(e) => {
@@ -73,9 +100,12 @@ async fn handle_get_key(
     }
 }
 
-async fn insert_user(pool: &SqlitePool, key_id: &String) -> Result<(), sqlx::Error> {
-    sqlx::query(r#"insert into users (uid) values (?)"#)
-        .bind(&key_id)
+async fn insert_user(pool: &SqlitePool, key: &SignedPublicKey) -> anyhow::Result<()> {
+    let key_id = key.key_id();
+    let key_blob = key.to_bytes()?;
+    sqlx::query(r#"insert into users (uid, key_blob) values (?, ?)"#)
+        .bind(key_id.as_ref())
+        .bind(key_blob)
         .execute(pool)
         .await?;
     Ok(())
