@@ -83,7 +83,7 @@ async fn handle_create_account(
         Err(error) => {
             return Err((
                 StatusCode::BAD_REQUEST,
-                format!("Bad create account:\n{error}"),
+                format!("Error creating account:\n{error}"),
             ));
         }
     };
