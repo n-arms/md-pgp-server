@@ -74,6 +74,10 @@ fn parse_create_account(bytes: &[u8]) -> anyhow::Result<SignedPublicKey> {
     Ok(key)
 }
 
+fn key_id_to_text(key_id: &KeyId) -> String {
+    hex::encode(key_id.as_ref())
+}
+
 async fn handle_create_account(
     State(pool): State<SqlitePool>,
     body: body::Bytes,
@@ -104,7 +108,7 @@ async fn insert_user(pool: &SqlitePool, key: &SignedPublicKey) -> anyhow::Result
     let key_id = key.key_id();
     let key_blob = key.to_bytes()?;
     sqlx::query(r#"insert into users (uid, key_blob) values (?, ?)"#)
-        .bind(key_id.as_ref())
+        .bind(key_id_to_text(&key_id))
         .bind(key_blob)
         .execute(pool)
         .await?;
