@@ -7,7 +7,6 @@ use axum::{
 };
 use pgp::{
     composed::{Deserializable, SignedPublicKey},
-    packet::Signature,
     ser::Serialize,
     types::{KeyDetails, KeyId},
 };
@@ -24,7 +23,8 @@ async fn main() {
     let pool = connect_db().await;
     // build our application with a single route
     let app = Router::new()
-        .route("/create", post(handle_create_account))
+        .route("/create_account", post(handle_create_account))
+        .route("/create_document", post(handle_create_document))
         .with_state(pool.clone());
 
     // run our app with hyper, listening globally on port 3000
@@ -119,6 +119,29 @@ async fn insert_user(pool: &SqlitePool, key: &SignedPublicKey) -> anyhow::Result
         .execute(pool)
         .await?;
     Ok(())
+}
+
+fn parse_create_document(bytes: &[u8]) -> anyhow::Result<(String, KeyId)> {
+    let (sig, plaintext) = parse_message(bytes)?;
+    let doc_name = String::from_utf8(plaintext)?;
+    Ok((doc_name, message_keyid(&sig)?))
+}
+
+async fn handle_create_document(
+    State(pool): State<SqlitePool>,
+    body: body::Bytes,
+) -> Result<String, (StatusCode, String)> {
+    let (doc_name, owner_id) = match parse_create_document(&body) {
+        Ok((doc_name, owner_id)) => (doc_name, owner_id),
+        Err(error) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("Error creating document:\n{error}"),
+            ));
+        }
+    };
+    let uuid = create_document(&pool, &owner_id, &doc_name).await;
+    Ok(uuid.to_string())
 }
 
 async fn create_document(pool: &SqlitePool, owner_key_id: &KeyId, doc_name: &String) -> Uuid {
