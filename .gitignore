@@ -22,3 +22,6 @@ target
 
 # local sqlite db
 data.db
+
+# pgp keys
+*.asc
