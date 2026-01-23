@@ -13,7 +13,7 @@ struct MessageNotSigned;
 #[error("Message had the wrong number of issues. Expected one, got {0:?}")]
 struct MessageBadIssuers(Vec<KeyId>);
 
-pub fn parse_message<'a>(message: &'a [u8]) -> Result<(Signature, Vec<u8>)> {
+pub fn parse_message(message: &[u8]) -> Result<(Signature, Vec<u8>)> {
     let mut message = Message::from_bytes(Cursor::new(message))?;
 
     let data = message.as_data_vec()?;
@@ -33,7 +33,7 @@ pub fn parse_message<'a>(message: &'a [u8]) -> Result<(Signature, Vec<u8>)> {
     Ok((signature, data))
 }
 
-pub fn message_keyid<'a>(sig: &Signature) -> Result<KeyId> {
+pub fn message_keyid(sig: &Signature) -> Result<KeyId> {
     let issuers = sig.issuer();
     if let [id] = issuers.as_slice() {
         Ok((*id).clone())
