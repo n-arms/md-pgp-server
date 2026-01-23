@@ -8,8 +8,9 @@ use sqlx::{Row, SqlitePool, sqlite::SqlitePoolOptions};
 use std::fs::File;
 use uuid::Uuid;
 
-#[tokio::main]
+mod signature;
 
+#[tokio::main]
 async fn main() {
     let pool = connect_db().await;
     // build our application with a single route
