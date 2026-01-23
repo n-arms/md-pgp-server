@@ -48,12 +48,14 @@ async fn connect_db() -> SqlitePool {
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS users (
-            uid TEXT PRIMARY KEY
+            uid TEXT PRIMARY KEY,
+            key_blob BLOB NOT NULL
         );
         CREATE TABLE IF NOT EXISTS documents (
             doc_id TEXT PRIMARY KEY,
             name TEXT,
             user_id TEXT,
+            shared_with TEXT,
             FOREIGN KEY (user_id) REFERENCES users(uid) 
         );
         "#,
@@ -100,8 +102,10 @@ async fn handle_create_account(
 
 async fn insert_user(pool: &SqlitePool, key: &SignedPublicKey) -> anyhow::Result<()> {
     let key_id = key.key_id();
-    sqlx::query(r#"insert into users (uid) values (?)"#)
+    let key_blob = key.to_bytes()?;
+    sqlx::query(r#"insert into users (uid, key_blob) values (?, ?)"#)
         .bind(key_id.as_ref())
+        .bind(key_blob)
         .execute(pool)
         .await?;
     Ok(())
