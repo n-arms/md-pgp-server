@@ -97,21 +97,21 @@ async fn handle_create_account(
     }
 }
 
-async fn insert_user(pool: &SqlitePool, fingerprint: &String) -> Result<(), sqlx::Error> {
+async fn insert_user(pool: &SqlitePool, key_id: &String) -> Result<(), sqlx::Error> {
     sqlx::query(r#"insert into users (uid) values (?)"#)
-        .bind(&fingerprint)
+        .bind(&key_id)
         .execute(pool)
         .await?;
     Ok(())
 }
 
-async fn create_document(pool: &SqlitePool, owner_fingerprint: &String, doc_name: &String) -> Uuid {
+async fn create_document(pool: &SqlitePool, owner_key_id: &String, doc_name: &String) -> Uuid {
     let id = Uuid::now_v7();
 
     sqlx::query(r#"insert into documents (doc_id, name, user_id) values (?, ?, ?)"#)
         .bind(&id.to_string())
         .bind(&doc_name)
-        .bind(&owner_fingerprint)
+        .bind(&owner_key_id)
         .execute(pool)
         .await
         .unwrap();
@@ -122,8 +122,8 @@ async fn create_document(pool: &SqlitePool, owner_fingerprint: &String, doc_name
 async fn share_document(
     pool: &SqlitePool,
     doc_id: &Uuid,
-    owner_fingerprint: &String,
-    user_fingerprint: &String,
+    owner_key_id: &String,
+    user_key_id: &String,
 ) {
     // get document from id
     // check owner
@@ -133,18 +133,18 @@ async fn share_document(
         .await
         .unwrap();
     let owner_id: String = doc_row.get("user_id");
-    if owner_id != *owner_fingerprint {
+    if owner_id != *owner_key_id {
         panic!("not owner");
     }
     // check new user in users table
     let users_row = sqlx::query(r#"select uid from users where uid = ?"#)
-        .bind(&user_fingerprint)
+        .bind(&user_key_id)
         .fetch_one(pool)
         .await
         .unwrap();
 
     let users = users_row.get::<String, _>("uid");
-    if users != *user_fingerprint {
+    if users != *user_key_id {
         panic!("user does not exist");
     }
 
@@ -163,7 +163,7 @@ async fn share_document(
     }
 
     // add to vec
-    shared_ids.push(user_fingerprint.to_string());
+    shared_ids.push(user_key_id.to_string());
 
     // iter fold back to string
     let shared_with_str = shared_ids.iter().fold(String::new(), |acc, x| {
@@ -183,10 +183,10 @@ async fn share_document(
         .unwrap();
 }
 
-async fn get_user_docs(pool: &SqlitePool, fingerprint: &String) -> Result<Vec<Uuid>, sqlx::Error> {
+async fn get_user_docs(pool: &SqlitePool, key_id: &String) -> Result<Vec<Uuid>, sqlx::Error> {
     let mut doc_ids = [].to_vec();
     let rows = sqlx::query(r#"select doc_id from documents where user_id = ?"#)
-        .bind(&fingerprint)
+        .bind(&key_id)
         .fetch_all(pool)
         .await?;
 
