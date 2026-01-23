@@ -99,9 +99,9 @@ async fn handle_create_account(
 }
 
 async fn insert_user(pool: &SqlitePool, key: &SignedPublicKey) -> anyhow::Result<()> {
-    let key_id = key.key_id().to_bytes()?;
+    let key_id = key.key_id();
     sqlx::query(r#"insert into users (uid) values (?)"#)
-        .bind(&key_id)
+        .bind(key_id.as_ref())
         .execute(pool)
         .await?;
     Ok(())
