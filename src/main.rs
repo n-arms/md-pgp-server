@@ -8,7 +8,8 @@ use axum::{
 use pgp::{
     composed::{Deserializable, SignedPublicKey},
     packet::Signature,
-    types::KeyId,
+    ser::Serialize,
+    types::{KeyDetails, KeyId},
 };
 use sqlx::{Row, SqlitePool, sqlite::SqlitePoolOptions};
 use std::{fs::File, io};
@@ -97,7 +98,8 @@ async fn handle_create_account(
     }
 }
 
-async fn insert_user(pool: &SqlitePool, key_id: &String) -> Result<(), sqlx::Error> {
+async fn insert_user(pool: &SqlitePool, key: &SignedPublicKey) -> anyhow::Result<()> {
+    let key_id = key.key_id().to_bytes()?;
     sqlx::query(r#"insert into users (uid) values (?)"#)
         .bind(&key_id)
         .execute(pool)
