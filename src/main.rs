@@ -74,6 +74,16 @@ fn parse_create_account(bytes: &[u8]) -> anyhow::Result<SignedPublicKey> {
     Ok(key)
 }
 
+fn key_id_to_text(key_id: &KeyId) -> String {
+    hex::encode(key_id.as_ref())
+}
+
+fn key_id_from_text(text: &str) -> anyhow::Result<KeyId> {
+    let bytes = hex::decode(text)?;
+    let octet = bytes.as_slice().try_into()?;
+    Ok(KeyId::new(octet))
+}
+
 async fn handle_create_account(
     State(pool): State<SqlitePool>,
     body: body::Bytes,
@@ -104,20 +114,20 @@ async fn insert_user(pool: &SqlitePool, key: &SignedPublicKey) -> anyhow::Result
     let key_id = key.key_id();
     let key_blob = key.to_bytes()?;
     sqlx::query(r#"insert into users (uid, key_blob) values (?, ?)"#)
-        .bind(key_id.as_ref())
+        .bind(key_id_to_text(&key_id))
         .bind(key_blob)
         .execute(pool)
         .await?;
     Ok(())
 }
 
-async fn create_document(pool: &SqlitePool, owner_key_id: &String, doc_name: &String) -> Uuid {
+async fn create_document(pool: &SqlitePool, owner_key_id: &KeyId, doc_name: &String) -> Uuid {
     let id = Uuid::now_v7();
 
     sqlx::query(r#"insert into documents (doc_id, name, user_id) values (?, ?, ?)"#)
         .bind(&id.to_string())
         .bind(&doc_name)
-        .bind(&owner_key_id)
+        .bind(key_id_to_text(owner_key_id))
         .execute(pool)
         .await
         .unwrap();
@@ -128,9 +138,9 @@ async fn create_document(pool: &SqlitePool, owner_key_id: &String, doc_name: &St
 async fn share_document(
     pool: &SqlitePool,
     doc_id: &Uuid,
-    owner_key_id: &String,
-    user_key_id: &String,
-) {
+    owner_key_id: &KeyId,
+    user_key_id: &KeyId,
+) -> anyhow::Result<()> {
     // get document from id
     // check owner
     let doc_row = sqlx::query(r#"select user_id from documents where doc_id = ?"#)
@@ -138,18 +148,19 @@ async fn share_document(
         .fetch_one(pool)
         .await
         .unwrap();
-    let owner_id: String = doc_row.get("user_id");
+    let owner_id_text: String = doc_row.get("user_id");
+    let owner_id = key_id_from_text(&owner_id_text)?;
     if owner_id != *owner_key_id {
         panic!("not owner");
     }
     // check new user in users table
     let users_row = sqlx::query(r#"select uid from users where uid = ?"#)
-        .bind(&user_key_id)
+        .bind(key_id_to_text(user_key_id))
         .fetch_one(pool)
         .await
         .unwrap();
 
-    let users = users_row.get::<String, _>("uid");
+    let users = key_id_from_text(&users_row.get::<String, _>("uid"))?;
     if users != *user_key_id {
         panic!("user does not exist");
     }
@@ -187,12 +198,14 @@ async fn share_document(
         .execute(pool)
         .await
         .unwrap();
+
+    Ok(())
 }
 
-async fn get_user_docs(pool: &SqlitePool, key_id: &String) -> Result<Vec<Uuid>, sqlx::Error> {
+async fn get_user_docs(pool: &SqlitePool, key_id: &KeyId) -> Result<Vec<Uuid>, sqlx::Error> {
     let mut doc_ids = [].to_vec();
     let rows = sqlx::query(r#"select doc_id from documents where user_id = ?"#)
-        .bind(&key_id)
+        .bind(&key_id_to_text(key_id))
         .fetch_all(pool)
         .await?;
 
