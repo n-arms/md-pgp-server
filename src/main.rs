@@ -3,19 +3,22 @@ use axum::{
     body::{self},
     extract::State,
     http::StatusCode,
-    routing::post,
+    routing::{get, post},
 };
+use pgp::ser::Serialize as PgpSerialize;
 use pgp::{
     composed::{Deserializable, SignedPublicKey},
-    ser::Serialize,
     types::{KeyDetails, KeyId},
 };
 use sqlx::{Row, SqlitePool, sqlite::SqlitePoolOptions};
 use std::{fs::File, io};
 use uuid::Uuid;
 
-use crate::signature::{message_keyid, parse_message, verify_message};
+use crate::signature::{
+    key_id_from_text, key_id_to_text, message_keyid, parse_message, verify_message,
+};
 
+mod endpoints;
 mod signature;
 
 #[tokio::main]
@@ -25,6 +28,10 @@ async fn main() {
     let app = Router::new()
         .route("/create_account", post(handle_create_account))
         .route("/create_document", post(handle_create_document))
+        .route(
+            "/documents",
+            get(endpoints::get_documents::handle_get_documents),
+        )
         .with_state(pool.clone());
 
     // run our app with hyper, listening globally on port 3000
@@ -56,6 +63,7 @@ async fn connect_db() -> SqlitePool {
             name TEXT,
             user_id TEXT,
             shared_with TEXT,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(uid) 
         );
         "#,
@@ -72,16 +80,6 @@ fn parse_create_account(bytes: &[u8]) -> anyhow::Result<SignedPublicKey> {
     let key = SignedPublicKey::from_bytes(io::Cursor::new(plaintext.clone()))?;
     verify_message(&signature, &key, &plaintext)?;
     Ok(key)
-}
-
-fn key_id_to_text(key_id: &KeyId) -> String {
-    hex::encode(key_id.as_ref())
-}
-
-fn key_id_from_text(text: &str) -> anyhow::Result<KeyId> {
-    let bytes = hex::decode(text)?;
-    let octet = bytes.as_slice().try_into()?;
-    Ok(KeyId::new(octet))
 }
 
 async fn handle_create_account(
@@ -223,19 +221,4 @@ async fn share_document(
         .unwrap();
 
     Ok(())
-}
-
-async fn get_user_docs(pool: &SqlitePool, key_id: &KeyId) -> Result<Vec<Uuid>, sqlx::Error> {
-    let mut doc_ids = [].to_vec();
-    let rows = sqlx::query(r#"select doc_id from documents where user_id = ?"#)
-        .bind(&key_id_to_text(key_id))
-        .fetch_all(pool)
-        .await?;
-
-    for row in rows {
-        let doc_id: String = row.get("doc_id");
-        doc_ids.push(Uuid::parse_str(&doc_id).unwrap());
-    }
-
-    Ok(doc_ids)
 }
