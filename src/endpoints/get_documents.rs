@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
 
-use crate::signature::{key_id_from_text, key_id_to_text};
+use crate::signature::{key_id_to_text, message_keyid, parse_message};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct DocumentsInfo {
@@ -17,7 +17,7 @@ struct DocumentsInfo {
 
 #[derive(Deserialize)]
 pub struct GetDocumentsParams {
-    key_id: String,
+    sig: String,
 }
 
 async fn get_user_docs(
@@ -48,16 +48,17 @@ pub async fn handle_get_documents(
     State(pool): State<SqlitePool>,
     Query(params): Query<GetDocumentsParams>,
 ) -> Result<String, (StatusCode, String)> {
-    let key = match key_id_from_text(&params.key_id) {
+    let (sig, _) = parse_message(&params.sig.as_bytes()).unwrap();
+    let key_id = match message_keyid(&sig) {
         Ok(key) => key,
         Err(error) => {
             return Err((
                 StatusCode::BAD_REQUEST,
-                format!("Error getting documents:\n{error}"),
+                format!("Error parsing signature:\n{error}"),
             ));
         }
     };
-    match get_user_docs(&pool, &key).await {
+    match get_user_docs(&pool, &key_id).await {
         Ok(docs) => Ok(serde_json::to_string(&docs).unwrap()),
         Err(e) => {
             let error_message = e.to_string();
