@@ -47,6 +47,15 @@ pub fn verify_message(signature: &Signature, key: &SignedPublicKey, data: &[u8])
     Ok(())
 }
 
+pub fn key_id_to_text(key_id: &KeyId) -> String {
+    hex::encode(key_id.as_ref())
+}
+
+pub fn key_id_from_text(text: &str) -> anyhow::Result<KeyId> {
+    let bytes = hex::decode(text)?;
+    let octet = bytes.as_slice().try_into()?;
+    Ok(KeyId::new(octet))
+}
 #[cfg(test)]
 mod tests {
     use pgp::types::KeyDetails;
