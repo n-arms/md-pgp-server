@@ -24,7 +24,6 @@ mod signature;
 #[tokio::main]
 async fn main() {
     let pool = connect_db().await;
-    // build our application with a single route
     let app = Router::new()
         .route("/create_account", post(handle_create_account))
         .route("/create_document", post(handle_create_document))

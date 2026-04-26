@@ -48,7 +48,16 @@ pub async fn handle_get_documents(
     State(pool): State<SqlitePool>,
     Query(params): Query<GetDocumentsParams>,
 ) -> Result<String, (StatusCode, String)> {
-    let (sig, _) = parse_message(&params.sig.as_bytes()).unwrap();
+    let sig_bytes = match hex::decode(params.sig) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("Error decoding signature:\n{error}"),
+            ));
+        }
+    };
+    let (sig, _) = parse_message(&sig_bytes).unwrap();
     let key_id = match message_keyid(&sig) {
         Ok(key) => key,
         Err(error) => {
